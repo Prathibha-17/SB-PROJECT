@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 import { initialCategories } from '../services/dummyData';
+import { useAuth } from './AuthContext';
 
 const BookContext = createContext(null);
 
@@ -10,25 +11,41 @@ export const BookProvider = ({ children }) => {
   const [categories, setCategories] = useState(initialCategories);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  const auth = useAuth();
+  const user = auth ? auth.user : null;
 
-  // Load books and orders on mount
+  // Load books and orders when component mounts or user state changes
   useEffect(() => {
     loadAllData();
-  }, []);
+  }, [user]);
 
   const loadAllData = async () => {
     setLoading(true);
+    
+    // 1. Fetch public books list
     try {
       const allBooks = await api.books.getAll();
-      const allOrders = await api.orders.getAll();
       setBooks(allBooks);
-      setOrders(allOrders);
-      
       const cats = ['All', ...new Set(allBooks.map(b => b.category))];
       setCategories(cats);
     } catch (err) {
-      console.error("Failed to load catalog data:", err);
-      setError(err.message || "Failed to load data");
+      console.error("Failed to load books catalog:", err);
+      setError(err.message || "Failed to load books");
+    }
+
+    // 2. Fetch orders list (requires token/admin auth)
+    try {
+      const token = localStorage.getItem('bookstore_token');
+      if (token) {
+        const allOrders = await api.orders.getAll();
+        setOrders(allOrders);
+      } else {
+        setOrders([]);
+      }
+    } catch (err) {
+      console.error("Failed to load orders:", err);
+      setOrders([]); // Clean orders if fetch fails (e.g. not an admin)
     } finally {
       setLoading(false);
     }
